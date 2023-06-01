@@ -1,5 +1,5 @@
 #
-# SecondBest.py 2023/5/27
+# SecondBest.py 2023/6/02
 #
 import pyxel
 WIDTH, HEIGHT = 100, 142
@@ -176,12 +176,12 @@ class App:
                 self.sb = SB_MUST
             if self.sb==SB_MUST:
                 self.cursor_x, self.cursor_y = CMSG_X, CMSG_Y+6
-                if self.vs==VS_MAN or (self.vs==VS_COM and self.turn==P2):
-                    pyxel.set_mouse_pos(self.cursor_x, self.cursor_y)
+                #if self.vs==VS_MAN or (self.vs==VS_COM and self.turn==P2):
+                #    pyxel.set_mouse_pos(self.cursor_x, self.cursor_y)
             elif self.ih[self.turn]:
                 self.cursor_x, self.cursor_y = self.xy_inhand(self.turn, 4)
-                if self.vs==VS_MAN or (self.vs==VS_COM and self.turn==P2):
-                    pyxel.set_mouse_pos(self.cursor_x, self.cursor_y)
+                #if self.vs==VS_MAN or (self.vs==VS_COM and self.turn==P2):
+                #    pyxel.set_mouse_pos(self.cursor_x, self.cursor_y)
             if not self.allmove and self.sb!=SB_MUST:  # 打つ手なし
                 self.win[1-self.turn] = 1
                 self.cnt = 0
