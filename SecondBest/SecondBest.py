@@ -1,9 +1,11 @@
 #
-# SecondBest.py 2023/6/02
+# SecondBest.py 2023/6/17
 #
+RELEASE_CANDIDATE = True
 import pyxel
 WIDTH, HEIGHT = 100, 142
 P1, P2 = 0, 1  # 白,赤
+OPP = {P1:P2, P2:P1}
 OB_XYWH = ((38,17,14,12), (62,17,14,12), (82,34,16,14), (86,62,18,14), 
            (66,85,20,16), (34,85,20,16), (14,62,18,14), (18,34,16,14))  # ボード上の駒
 IH_X, IH_Y, IH_W, IH_H = 50, 118, 20, 18  # 持ち駒
@@ -140,6 +142,58 @@ class App:
     def se(self, n):
         pyxel.play(0, [n])
 
+    def com_lv1(self):
+        idx = -2
+        if self.sb==SB_MUST or (self.sb==SB_ENABLE and pyxel.rndi(0,5)==0):  # セカンドベスト：必須／ランダム
+            idx = -1
+        elif self.winidx:  # 勝ち
+            r = pyxel.rndi(0, len(self.winidx)-1)
+            idx = self.winidx[r]
+        elif self.sb==SB_ENABLE and pyxel.rndi(0,2)==0:  #  セカンドベスト：必須／ランダム
+            idx = -1
+        elif self.noneidx:  # （勝ち・引き分け・負け）どれでもない
+            r = pyxel.rndi(0, len(self.noneidx)-1)
+            idx = self.noneidx[r]
+        elif self.sb==SB_ENABLE:  # 引き分け・負け ⇒ セカンドベスト
+            idx = -1
+        elif self.drawidx:  # 引き分け
+            r = pyxel.rndi(0, len(self.drawidx)-1)
+            idx = self.drawidx[r]
+        elif self.loseidx:  # 負け
+            r = pyxel.rndi(0, len(self.loseidx)-1)
+            idx = self.loseidx[r]
+        return idx
+
+    def com_lv2(self):
+        idx = -2
+        for i in reversed(range(len(self.noneidx))):
+            _, oppwinidx, _, _, _ = self.canmove(OPP[self.turn], self.allmove[self.noneidx[i]][1], self.allmove[self.noneidx[i]][2], [-1,-1])
+            if (self.sb==SB_DISABLE and oppwinidx) or len(oppwinidx)>=2: # 相手の勝ち手＝自分の負け手
+                self.loseidx.append(self.noneidx.pop(i))
+        if self.sb==SB_ENABLE:
+            _, oppwinidx, _, _, _ = self.canmove(OPP[self.turn], self.previh, self.prevbd, self.prevmove)  # セカンドベスト後の相手の勝ち手
+        if self.sb==SB_DONE and self.winidx:  # セカンドベスト済で自分の勝ち手＝勝ち
+            r = pyxel.rndi(0, len(self.winidx)-1)
+            idx = self.winidx[r]
+        elif len(self.winidx)>=2:  # セカンドベスト済で（自分の勝ち手）×２＝次勝ち
+            r = pyxel.rndi(0, len(self.winidx)-1)
+            idx = self.winidx[r]
+        elif self.sb==SB_MUST or (self.sb==SB_ENABLE and not oppwinidx and pyxel.rndi(0,3)==0 ):  # セカンドベスト：必須／ランダム
+            idx = -1
+        elif self.winidx or self.noneidx:  # 勝ち・どれでもない
+            winnoneidx = self.winidx + self.noneidx
+            r = pyxel.rndi(0, len(winnoneidx)-1)
+            idx = winnoneidx[r]
+        elif self.sb==SB_ENABLE and not oppwinidx:  # 引き分け・負け：セカンドベスト
+            idx = -1
+        elif self.drawidx:  # 引き分け
+            r = pyxel.rndi(0, len(self.drawidx)-1)
+            idx = self.drawidx[r]
+        elif self.loseidx:  # 負け
+            r = pyxel.rndi(0, len(self.loseidx)-1)
+            idx = self.loseidx[r]
+        return idx
+
     def update(self):
         if self.st==ST_TITLE:  # タイトル
             self.cur = CUR_HAND
@@ -169,21 +223,17 @@ class App:
                 self.st = ST_START
 
         elif self.st==ST_START:  # 前処理
-            self.turn = 1-self.turn  # 交代
+            self.turn = OPP[self.turn]  # 交代
             self.allmove, self.winidx, self.loseidx, self.drawidx, self.noneidx = \
                     self.canmove(self.turn, self.ih, self.bd, self.prevmove if self.sb==SB_DONE else [-1,-1])  # 全ての手
             if not self.allmove and self.sb==SB_ENABLE:  # 打つ手なし
                 self.sb = SB_MUST
             if self.sb==SB_MUST:
                 self.cursor_x, self.cursor_y = CMSG_X, CMSG_Y+6
-                #if self.vs==VS_MAN or (self.vs==VS_COM and self.turn==P2):
-                #    pyxel.set_mouse_pos(self.cursor_x, self.cursor_y)
             elif self.ih[self.turn]:
                 self.cursor_x, self.cursor_y = self.xy_inhand(self.turn, 4)
-                #if self.vs==VS_MAN or (self.vs==VS_COM and self.turn==P2):
-                #    pyxel.set_mouse_pos(self.cursor_x, self.cursor_y)
             if not self.allmove and self.sb!=SB_MUST:  # 打つ手なし
-                self.win[1-self.turn] = 1
+                self.win[OPP[self.turn]] = 1
                 self.cnt = 0
                 if self.vs!=VS_DEMO:
                     self.se(3)  # 終了
@@ -195,25 +245,7 @@ class App:
 
         elif self.st==ST_COM:  # コンピュータの手
             self.cur = CUR_HAND
-            self.moveidx = -2
-            if self.sb==SB_MUST or (self.sb==SB_ENABLE and pyxel.rndi(0,5)==0):
-                self.moveidx = -1
-            elif self.winidx:
-                r = pyxel.rndi(0, len(self.winidx)-1)
-                self.moveidx = self.winidx[r]
-            elif self.sb==SB_ENABLE and pyxel.rndi(0,2)==0:
-                self.moveidx = -1
-            elif self.noneidx:
-                r = pyxel.rndi(0, len(self.noneidx)-1)
-                self.moveidx = self.noneidx[r]
-            elif self.sb==SB_ENABLE:
-                self.moveidx = -1
-            elif self.drawidx:
-                r = pyxel.rndi(0, len(self.drawidx)-1)
-                self.moveidx = self.drawidx[r]
-            elif self.loseidx:
-                r = pyxel.rndi(0, len(self.loseidx)-1)
-                self.moveidx = self.loseidx[r]
+            self.moveidx = self.com_lv2()
             self.mx, self.my = pyxel.mouse_x, pyxel.mouse_y
             self.cnt = 0
             self.st = ST_MOTION
@@ -247,7 +279,6 @@ class App:
                         takepos = self.allmove[self.moveidx][0][0]
                         if takepos>=0:  # 盤面から駒を取る
                             self.cursor_x, self.cursor_y = self.xy_piece(takepos, 4)
-
                     elif self.cnt==20:
                         if self.vs!=VS_DEMO:
                             self.se(0)  # 取る
@@ -342,7 +373,7 @@ class App:
                 self.sb = SB_DISABLE
             elif self.sb==SB_DISABLE:
                 self.sb = SB_ENABLE
-            if self.win[1-self.turn]:
+            if self.win[OPP[self.turn]]:
                 self.cnt = 0
                 if self.vs!=VS_DEMO:
                     self.se(3)  # 終了
@@ -480,7 +511,8 @@ class App:
                 pyxel.text(38, 132, 'Player', 10)
 
     def draw_left(self):  # 左円メッセージ
-        #pyxel.rectb(LMSG_X, LMSG_Y, LMSG_W, LMSG_H, 7)
+        if not RELEASE_CANDIDATE:
+            pyxel.rectb(LMSG_X, LMSG_Y, LMSG_W, LMSG_H, 13)
         if self.st==ST_TITLE:
             pyxel.text(LMSG_X+6, LMSG_Y+3, 'Human', 10)
             pyxel.text(LMSG_X+12, LMSG_Y+10, 'vs', 10)
@@ -489,7 +521,8 @@ class App:
             pyxel.text(LMSG_X+6, LMSG_Y+10, 'Title', 10)
 
     def draw_right(self):  # 右円メッセージ
-        #pyxel.rectb(RMSG_X, RMSG_Y, RMSG_W, RMSG_H, 7)
+        if not RELEASE_CANDIDATE:
+            pyxel.rectb(RMSG_X, RMSG_Y, RMSG_W, RMSG_H, 13)
         if self.st==ST_TITLE:
             pyxel.text(RMSG_X+0, RMSG_Y+3, 'Computer', 10)
             pyxel.text(RMSG_X+12, RMSG_Y+10, 'vs', 10)
@@ -546,6 +579,37 @@ class App:
         elif self.cur==CUR_CROSS:
             pyxel.blt(self.cursor_x-5, self.cursor_y-5, 0, 64, 32 if self.turn==P1 else 48, 12, 12, 0)
 
+    def draw_debug(self):  # デバッグ
+        txt = ''
+        if self.st==ST_TITLE:
+            txt = 'TITLE'
+        elif self.st==ST_START:
+            txt = 'START'
+        elif self.st==ST_COM:
+            txt = 'COM'
+        elif self.st==ST_MOTION:
+            txt = 'MOTION'
+        elif self.st==ST_TAKE:
+            txt = 'TAKE'
+        elif self.st==ST_PLACE:
+            txt = 'PLACE'
+        elif self.st==ST_JUDGE:
+            txt = 'JUDGE'
+        elif self.st==ST_END:
+            txt = 'END'
+        pyxel.text(1, 1, txt, 13)
+        txt = ''
+        if self.sb==SB_DONE:
+            txt = 'DONE'
+        elif self.sb==SB_DISABLE:
+            txt = 'DISABLE'
+        elif self.sb==SB_ENABLE:
+            txt = 'ENABLE'
+        elif self.sb==SB_MUST:
+            txt = 'MUST'
+        pyxel.text(1, 7, txt, 13)
+        pyxel.text(1, 13, f'{self.cnt}', 13)
+
     def draw(self):
         pyxel.cls(3)
         self.draw_board()  # ボード
@@ -556,5 +620,7 @@ class App:
         self.draw_right()  # 右メッセージ
         self.draw_path()  # 軌跡
         self.draw_cursor()  # カーソル
+        if not RELEASE_CANDIDATE:
+            self.draw_debug()  # デバッグ
 
 App()
